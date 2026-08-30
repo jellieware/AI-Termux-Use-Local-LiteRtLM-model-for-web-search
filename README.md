@@ -2,7 +2,7 @@
 <br><br>
 Open "ask" file with text editor and simply replace the line where you store your litertlm model locally
 <br><br>
-After editing place "ask" file in "bin" directory
+After editing, place "ask" file in "bin" directory
 <br><br>
 To ask a question simple type:
 <br><br>
