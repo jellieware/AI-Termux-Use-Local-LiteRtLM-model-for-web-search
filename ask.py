@@ -16,7 +16,7 @@ import litert_lm
 # SETTINGS
 # ============================================================
 
-MAX_RESULTS = 10
+MAX_RESULTS = 15
 SEARCH_TIMEOUT = 20
 
 USER_AGENT = (
@@ -28,7 +28,7 @@ USER_AGENT = (
 
 
 # ============================================================
-# STATUS OUTPUT
+# STATUS
 # ============================================================
 
 def status(message, color="yellow"):
@@ -50,7 +50,7 @@ def status(message, color="yellow"):
 
 
 # ============================================================
-# HTML CLEANING
+# CLEAN HTML
 # ============================================================
 
 def clean_html(text):
@@ -90,7 +90,7 @@ def clean_html(text):
 
 
 # ============================================================
-# URL CLEANING
+# DECODE DUCKDUCKGO REDIRECT URL
 # ============================================================
 
 def decode_url(url):
@@ -108,7 +108,6 @@ def decode_url(url):
             parsed.query
         )
 
-        # DuckDuckGo redirect URL.
         if "uddg" in params:
 
             return urllib.parse.unquote(
@@ -127,28 +126,25 @@ def decode_url(url):
 
 def extract_snippet(
     page,
-    start_position
+    position
 ):
 
-    # Search a reasonable amount of HTML following
-    # the result title.
-
     section = page[
-        start_position:
-        start_position + 6000
+        position:
+        position + 8000
     ]
 
     patterns = [
-
-        r'class=["\']result__snippet["\'][^>]*>'
-        r'(.*?)'
-        r'</',
 
         r'class=["\'][^"\']*result__snippet[^"\']*["\'][^>]*>'
         r'(.*?)'
         r'</',
 
-        r'class=["\']result-snippet["\'][^>]*>'
+        r'class=["\'][^"\']*result-snippet[^"\']*["\'][^>]*>'
+        r'(.*?)'
+        r'</',
+
+        r'class=["\'][^"\']*snippet[^"\']*["\'][^>]*>'
         r'(.*?)'
         r'</',
     ]
@@ -171,26 +167,24 @@ def extract_snippet(
 
 
 # ============================================================
-# PARSE DUCKDUCKGO HTML RESULTS
+# PARSE STANDARD DUCKDUCKGO HTML
 # ============================================================
 
-def parse_duckduckgo_html(page):
+def parse_standard_results(page):
 
     results = []
 
-    # --------------------------------------------------------
-    # Format used by DuckDuckGo HTML results.
-    # --------------------------------------------------------
-
     patterns = [
 
-        r'<a[^>]+class=["\'][^"\']*result__a[^"\']*["\']'
-        r'[^>]+href=["\']([^"\']+)["\'][^>]*>'
+        # href before class
+        r'<a[^>]+href=["\']([^"\']+)["\'][^>]+'
+        r'class=["\'][^"\']*result__a[^"\']*["\'][^>]*>'
         r'(.*?)'
         r'</a>',
 
-        r'<a[^>]+href=["\']([^"\']+)["\']'
-        r'[^>]+class=["\'][^"\']*result__a[^"\']*["\'][^>]*>'
+        # class before href
+        r'<a[^>]+class=["\'][^"\']*result__a[^"\']*["\'][^>]+'
+        r'href=["\']([^"\']+)["\'][^>]*>'
         r'(.*?)'
         r'</a>',
     ]
@@ -229,9 +223,6 @@ def parse_duckduckgo_html(page):
         ):
             continue
 
-        # Find where this title occurs in the page so
-        # we can locate its snippet.
-
         position = page.find(
             title_html
         )
@@ -261,11 +252,9 @@ def parse_duckduckgo_html(page):
 # PARSE DUCKDUCKGO LITE
 # ============================================================
 
-def parse_duckduckgo_lite(page):
+def parse_lite_results(page):
 
     results = []
-
-    # Lite results commonly use result-link.
 
     patterns = [
 
@@ -340,45 +329,41 @@ def duckduckgo_search(query):
         "kp": "-1",
     })
 
-    urls = [
+    search_urls = [
 
-        # HTML search.
         "https://html.duckduckgo.com/html/?"
         + encoded,
 
-        # Lite search.
         "https://lite.duckduckgo.com/lite/?"
-        + encoded,
-
-        # No-AI search.
-        "https://noai.duckduckgo.com/?"
-        + encoded,
-
-        # Normal search as final fallback.
-        "https://duckduckgo.com/?"
         + encoded,
     ]
 
     headers = {
         "User-Agent": USER_AGENT,
+
         "Accept": (
             "text/html,application/xhtml+xml,"
             "application/xml;q=0.9,*/*;q=0.8"
         ),
-        "Accept-Language": "en-US,en;q=0.9",
-        "Cache-Control": "no-cache",
-        "Pragma": "no-cache",
-        "DNT": "1",
+
+        "Accept-Language":
+            "en-US,en;q=0.9",
+
+        "Cache-Control":
+            "no-cache",
+
+        "Pragma":
+            "no-cache",
     }
 
     last_error = ""
 
-    for search_url in urls:
+    for search_url in search_urls:
 
         try:
 
             status(
-                "[Trying DuckDuckGo...]",
+                "[Searching DuckDuckGo...]",
                 "cyan"
             )
 
@@ -401,22 +386,22 @@ def duckduckgo_search(query):
             if not page:
                 continue
 
-            # ------------------------------------------------
-            # HTML parser.
-            # ------------------------------------------------
+            # ----------------------------------------------
+            # Standard parser
+            # ----------------------------------------------
 
-            results = parse_duckduckgo_html(
+            results = parse_standard_results(
                 page
             )
 
             if results:
                 return results
 
-            # ------------------------------------------------
-            # Lite parser.
-            # ------------------------------------------------
+            # ----------------------------------------------
+            # Lite parser
+            # ----------------------------------------------
 
-            results = parse_duckduckgo_lite(
+            results = parse_lite_results(
                 page
             )
 
@@ -457,7 +442,7 @@ def duckduckgo_search(query):
     if last_error:
 
         status(
-            f"[All search methods failed: {last_error}]",
+            f"[Search failed: {last_error}]",
             "red"
         )
 
@@ -465,41 +450,92 @@ def duckduckgo_search(query):
 
 
 # ============================================================
-# NEWS SEARCH
+# MULTI-QUERY SEARCH
 #
-# DuckDuckGo's normal HTML search can be used with news
-# keywords. This avoids third-party Python packages.
+# Instead of searching only one vague query, create several
+# targeted searches and combine the results.
 # ============================================================
 
-def news_search(query):
+def perform_web_search(
+    user_prompt
+):
 
-    year = str(
-        datetime.now().year
+    query = make_search_query(
+        user_prompt
     )
 
-    query_lower = query.lower()
+    is_news = any(
+        term in query.lower()
+        for term in [
+            "news",
+            "headline",
+            "headlines",
+            "breaking",
+            "top stories"
+        ]
+    )
 
-    if year not in query_lower:
+    searches = []
 
-        query = (
-            query
-            + " "
-            + year
+    # --------------------------------------------------------
+    # Main query
+    # --------------------------------------------------------
+
+    searches.append(
+        query
+    )
+
+    # --------------------------------------------------------
+    # For news/current events, search several angles.
+    # --------------------------------------------------------
+
+    if is_news:
+
+        searches.append(
+            query + " latest developments"
         )
 
-    # Search multiple formulations if needed.
+        searches.append(
+            query + " major events"
+        )
 
-    searches = [
-        query,
-        query + " latest",
-        query + " today",
-    ]
+        searches.append(
+            query + " analysis"
+        )
+
+    # --------------------------------------------------------
+    # Remove duplicate search strings.
+    # --------------------------------------------------------
+
+    unique_searches = []
+
+    for item in searches:
+
+        item = item.strip()
+
+        if (
+            item
+            and item not in unique_searches
+        ):
+
+            unique_searches.append(
+                item
+            )
 
     all_results = []
 
     seen_urls = set()
 
-    for search_query in searches:
+    # --------------------------------------------------------
+    # Run searches.
+    # --------------------------------------------------------
+
+    for search_query in unique_searches:
+
+        status(
+            f"[Query: {search_query}]",
+            "cyan"
+        )
 
         results = duckduckgo_search(
             search_query
@@ -515,10 +551,18 @@ def news_search(query):
             if not url:
                 continue
 
-            if url in seen_urls:
+            # Avoid duplicate pages.
+
+            normalized_url = url.rstrip(
+                "/"
+            ).lower()
+
+            if normalized_url in seen_urls:
                 continue
 
-            seen_urls.add(url)
+            seen_urls.add(
+                normalized_url
+            )
 
             all_results.append(
                 result
@@ -534,38 +578,16 @@ def news_search(query):
 
 
 # ============================================================
-# WEB SEARCH
+# FORMAT WEB RESULTS
 # ============================================================
 
-def web_search(query):
+def web_search(
+    user_prompt
+):
 
-    query = query.strip()
-
-    if not query:
-        return ""
-
-    is_news = any(
-        phrase in query.lower()
-        for phrase in [
-            "news",
-            "headline",
-            "headlines",
-            "top stories",
-            "breaking",
-        ]
+    results = perform_web_search(
+        user_prompt
     )
-
-    if is_news:
-
-        results = news_search(
-            query
-        )
-
-    else:
-
-        results = duckduckgo_search(
-            query
-        )
 
     if not results:
 
@@ -576,9 +598,10 @@ def web_search(query):
 
         return ""
 
-    # ========================================================
-    # FORMAT RESULTS FOR GEMMA
-    # ========================================================
+    status(
+        f"[Found {len(results)} web results]",
+        "green"
+    )
 
     output = []
 
@@ -591,8 +614,8 @@ def web_search(query):
     )
 
     output.append(
-        "These are actual results returned "
-        "by the application's web search."
+        "The following information was retrieved "
+        "from live web searches."
     )
 
     output.append("")
@@ -635,7 +658,9 @@ def web_search(query):
                 f"SNIPPET: {snippet}"
             )
 
-        output.append("")
+        output.append(
+            ""
+        )
 
     output.append(
         "END LIVE WEB SEARCH RESULTS"
@@ -647,16 +672,17 @@ def web_search(query):
 
 
 # ============================================================
-# WEB SEARCH DETECTION
+# DETERMINE WHETHER WEB SEARCH IS REQUIRED
 # ============================================================
 
-def needs_web_search(prompt):
+def needs_web_search(
+    prompt
+):
 
     text = prompt.lower()
 
     triggers = [
 
-        # Explicit search.
         "search",
         "search the web",
         "search online",
@@ -667,7 +693,6 @@ def needs_web_search(prompt):
         "internet",
         "web results",
 
-        # Current information.
         "today",
         "tonight",
         "yesterday",
@@ -682,7 +707,6 @@ def needs_web_search(prompt):
         "this month",
         "this year",
 
-        # News.
         "news",
         "headline",
         "headlines",
@@ -691,30 +715,29 @@ def needs_web_search(prompt):
         "top news",
         "latest news",
 
-        # Weather.
         "weather",
         "forecast",
 
-        # Current events.
         "what happened",
         "what's happening",
         "what is happening",
 
-        # Current year.
         "2026",
     ]
 
     return any(
-        item in text
-        for item in triggers
+        trigger in text
+        for trigger in triggers
     )
 
 
 # ============================================================
-# SEARCH QUERY CLEANUP
+# CREATE SEARCH QUERY
 # ============================================================
 
-def make_search_query(prompt):
+def make_search_query(
+    prompt
+):
 
     query = prompt.strip()
 
@@ -757,10 +780,11 @@ def make_search_query(prompt):
     ).strip()
 
     if not query_lower:
+
         query_lower = query
 
     # --------------------------------------------------------
-    # Add current year to current/news searches.
+    # Current year.
     # --------------------------------------------------------
 
     current_year = str(
@@ -768,6 +792,7 @@ def make_search_query(prompt):
     )
 
     current_terms = [
+
         "today",
         "latest",
         "current",
@@ -796,7 +821,7 @@ def make_search_query(prompt):
 
 
 # ============================================================
-# BUILD WEB-AWARE GEMMA PROMPT
+# BUILD DETAILED GEMMA PROMPT
 # ============================================================
 
 def build_web_prompt(
@@ -805,35 +830,56 @@ def build_web_prompt(
 ):
 
     return f"""
-You have been given LIVE WEB SEARCH RESULTS by the
-application.
+You are an AI assistant with access to LIVE WEB SEARCH
+RESULTS supplied by the application.
+
+The user's question is:
+
+{user_prompt}
+
+You MUST use the web results below as the primary source
+for current information.
 
 IMPORTANT:
 
-The application performed the web search for you.
+- Do NOT say that you cannot access the internet.
+- Do NOT say that you do not have real-time information.
+- Do NOT say that you lack live news feeds.
+- Do NOT give a vague generic answer.
+- Do NOT simply repeat one search result.
+- Do NOT invent facts.
+- Do NOT invent URLs or sources.
+- Use multiple results whenever possible.
+- Compare information across different results.
+- Explain the important details.
+- Include relevant dates.
+- Explain what happened, who was involved, where it
+  happened, and why it matters when that information is
+  available.
+- For news, distinguish individual stories instead of
+  combining everything into one vague paragraph.
+- If sources disagree, mention the disagreement.
+- If the available results are insufficient, explicitly
+  say what information is missing.
 
-You MUST use the supplied web results to answer the
-user's question.
+DEPTH REQUIREMENT:
 
-Do NOT say that you lack internet access.
+Give a detailed, substantive answer.
 
-Do NOT say that you cannot access real-time information.
+For a news request, provide:
 
-Do NOT say that you do not have live news feeds.
+1. A concise overview of the major stories.
+2. Separate sections for the most important stories.
+3. What happened.
+4. The key people, organizations, or countries involved.
+5. Important dates and numbers when available.
+6. Why each story matters.
+7. Relevant background or context from the search results.
+8. What is known versus what remains uncertain.
+9. Source URLs at the end of the relevant sections.
 
-Do NOT ignore the supplied search results.
-
-Do NOT invent facts that are not supported by the
-search results.
-
-If the search results are incomplete, clearly say that
-the available search results were incomplete.
-
-When the user asks about current events, today's news,
-recent information, or other time-sensitive information,
-prioritize the supplied search results.
-
-Use the URLs and snippets as evidence.
+Do not make the answer unnecessarily repetitive, but
+prefer depth over a short generic response.
 
 LIVE WEB SEARCH RESULTS
 =======================
@@ -842,15 +888,8 @@ LIVE WEB SEARCH RESULTS
 
 =======================
 
-USER QUESTION
-=============
-
-{user_prompt}
-
-=======================
-
-Answer the user's question using the supplied live
-web search results.
+Now answer the user's question in detail using the
+search results above.
 """.strip()
 
 
@@ -892,21 +931,17 @@ def main():
     )
 
     # ========================================================
-    # LITERT SETTINGS
+    # LITERT
     # ========================================================
 
     litert_lm.set_min_log_severity(
         litert_lm.LogSeverity.ERROR
     )
 
-    # ========================================================
-    # DEFAULT PROMPT
-    # ========================================================
-
     final_input_text = user_prompt
 
     # ========================================================
-    # WEB SEARCH
+    # WEB
     # ========================================================
 
     if needs_web_search(
@@ -923,15 +958,10 @@ def main():
         )
 
         web_results = web_search(
-            search_query
+            user_prompt
         )
 
         if web_results:
-
-            status(
-                "[Web search succeeded]",
-                "green"
-            )
 
             final_input_text = build_web_prompt(
                 user_prompt,
@@ -940,30 +970,21 @@ def main():
 
         else:
 
-            status(
-                "[Web search failed]",
-                "red"
-            )
-
             # ------------------------------------------------
-            # Do NOT allow the offline model to fabricate
-            # current information.
+            # Prevent the model from fabricating current
+            # information when web search failed.
             # ------------------------------------------------
 
             final_input_text = f"""
-The application attempted a live web search for the
-following question:
-
-{user_prompt}
-
-The live web search returned no usable results.
+The application attempted a live web search but received
+no usable web results.
 
 Do not invent current information.
 
-Do not pretend that you know today's news.
+Tell the user that the live web search failed.
 
-Tell the user briefly that the live web search failed
-and that no current search results were available.
+USER QUESTION:
+{user_prompt}
 """.strip()
 
     # ========================================================
@@ -984,7 +1005,7 @@ and that no current search results were available.
                 )
 
                 # =================================================
-                # EXTRACT RESPONSE TEXT
+                # EXTRACT TEXT
                 # =================================================
 
                 raw_text = ""
@@ -1028,7 +1049,7 @@ and that no current search results were available.
                     )
 
                 # =================================================
-                # EMPTY RESPONSE
+                # HANDLE EMPTY RESPONSE
                 # =================================================
 
                 if not raw_text:
@@ -1041,7 +1062,7 @@ and that no current search results were available.
                     sys.exit(1)
 
                 # =================================================
-                # FIX ESCAPED NEWLINES
+                # CLEAN ESCAPED NEWLINES
                 # =================================================
 
                 raw_text = raw_text.replace(
@@ -1114,7 +1135,7 @@ and that no current search results were available.
                         pass
 
                 # =================================================
-                # FINAL OUTPUT
+                # OUTPUT
                 # =================================================
 
                 print(
@@ -1138,3 +1159,4 @@ and that no current search results were available.
 if __name__ == "__main__":
     main()
 
+ 
