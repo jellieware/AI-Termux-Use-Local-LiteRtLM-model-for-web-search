@@ -11,4 +11,4 @@ ask "question goes here"
 <br><br>
 You need to have litertlm and python3 installed in termux first!
 <br><br>
-<img width="720" height="1604" alt="1000078672" src="https://github.com/user-attachments/assets/a768b2f7-36f3-4228-9b34-f7f6d31e064d" />
+<img width="720" height="1604" alt="1000078677" src="https://github.com/user-attachments/assets/d43cb64c-cf3d-4665-8dec-8b6d99c4e324" />
