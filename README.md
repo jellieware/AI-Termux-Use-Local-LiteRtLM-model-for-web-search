@@ -8,6 +8,10 @@ After editing, place "ask" and "ask.py" files in "bin" directory:
 Android: /data/data/com.termux/files/usr/bin/
 Linux: /usr/bin/
 <br><br>
+chmod +x /data/data/com.termux/files/usr/bin/ask
+<br>
+chmod +x /data/data/com.termux/files/usr/bin/ask.py
+<br><br>
 To ask a question simply type:
 <br><br>
 ask "question goes here"
