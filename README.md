@@ -1,5 +1,7 @@
 # AI-Termux-Use-Local-LiteRtLM-model-for-web-search
 <br><br>
+Allows your local AI model to search the web!
+<br><br>
 Open "ask.py" file with text editor and simply replace the line where you store your litertlm model locally (line 928).
 Change "ask.py" file location inside "ask" file
 <br><br>
