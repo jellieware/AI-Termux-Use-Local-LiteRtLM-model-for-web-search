@@ -1,6 +1,6 @@
 # AI-Termux-Use-Local-LiteRtLM-model-for-web-search
 <br><br>
-Open "ask" file with text editor and simply replace the line where you store your litertlm model locally
+Open "ask" file with text editor and simply replace the line where you store your litertlm model locally (line 840)
 <br><br>
 After editing, place "ask" file in "bin" directory
 <br><br>
