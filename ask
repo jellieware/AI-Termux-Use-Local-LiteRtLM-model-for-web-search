@@ -1,2 +1,2 @@
 #!/data/data/com.termux/files/usr/bin/bash
-python "/data/data/com.termux/files/usr/bin/ask.py" "$@"
+python "/data/data/com.termux/files/usr/bin/ask.py" "$*"
