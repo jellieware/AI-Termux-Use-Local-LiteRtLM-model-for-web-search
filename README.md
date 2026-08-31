@@ -18,7 +18,7 @@ Before installing, ensure you have the following packages installed on your syst
  * Update Script Reference:
    Update the internal path pointing to ask.py inside the ask file.
  * Move Files to Bin:
-   Place both the ask and ask.py files into your system's bin directory:
+   Place "ask", "ask.py", "default.txt" files into your system's bin directory:
    * Android (Termux): /data/data/com.termux/files/usr/bin/
    * Linux: /usr/bin/
 
