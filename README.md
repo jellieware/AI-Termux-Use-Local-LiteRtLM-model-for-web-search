@@ -11,6 +11,21 @@ Before installing, ensure you have the following packages installed on your syst
  * python3
  * litertlm
  * ollama
+ * llama.cpp
+
+# Ollama *only* preparation<br><br>
+ * Download your gguf file
+ * Open the terminal in the same place you have the "gguf" file, "Modelfile", and "register.sh" placed.
+ * Open "Modelfile" with a text editor and edit the line to point to your gguf file.
+ * Open "register.sh" with a text editor and edit the model name with any name you want, dont forget to write the exact same name at the top of the file "ask.py" where it says ollama=
+ * Run the command: chmod +x register.sh
+ * Run the command: bash register.sh
+ * At this point it should register your "gguf" file. 
+ * If it does not register! You might have to run the following command:
+ * 
+
+
+
 
 # Installation & Setup
  * Configure the Model Path:
