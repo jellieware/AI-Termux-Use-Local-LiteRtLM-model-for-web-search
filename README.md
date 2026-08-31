@@ -7,7 +7,7 @@ Empower your local AI model with real-time web search capabilities in Termux (An
  * 1 = "LiteRtLm"
  * 2 = "gguf" <br><br>
 Prerequisites
-Before installing, ensure you have the following packages installed on your system:
+Before installing, ensure you have the following packages installed on your system:<br>
  * python3
  * litertlm
  * ollama
