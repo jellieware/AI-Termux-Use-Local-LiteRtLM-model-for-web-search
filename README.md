@@ -2,7 +2,7 @@
 <br><br>
 Allows your local AI model to search the web!
 <br><br>
-Open "ask.py" file with text editor and simply replace the line where you store your litertlm model locally (line 928).
+Open "ask.py" file with text editor and simply replace the line where you store your litertlm model locally (line 1110).
 Change "ask.py" file location inside "ask" file
 <br><br>
 After editing, place "ask" and "ask.py" files in "bin" directory:
