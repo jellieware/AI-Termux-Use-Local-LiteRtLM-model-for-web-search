@@ -17,19 +17,21 @@ Before installing, ensure you have the following packages installed on your syst
  * Download your gguf file
  * Open the terminal in the same place you have the "gguf" file, "Modelfile", and "register.sh" placed.
  * Open "Modelfile" with a text editor and edit the line to point to your gguf file.
- * Open "register.sh" with a text editor and edit the model name with any name you want, dont forget to write the exact same name at the top of the file "ask.py" where it says ollama=
+ * Open "register.sh" with a text editor and edit the model name with any name you want, dont forget to write the exact same name at the top of the file "ask.py" where it says ollama_model=
  * Run the command: chmod +x register.sh
  * Run the command: bash register.sh
  * At this point it should register your "gguf" file. 
- * If it does not register! You might have to run the following command:
- * 
+ * If it does not register! You might have to run the following command: llama-quantize ./original.gguf ./modified.gguf q4_k_m
+ * Then, modify "Modelfile" to point to "modified.gguf"
+ * Finally run: "bash register.sh" again
 
+# Note for *Ollama* only
+ * For every session you have with your gguf model you need to open a terminal tab/window and enter: "ollama serve" before you begin.
+ * You can close the "ollama serve" window when you are done!
 
-
-
-# Installation & Setup
+# Installation & Setup (Ollama + LiteRtLm)
  * Configure the Model Path:
-   Open the ask.py file in a text editor and modify at the top of the file the paths that point to your locally stored litertlm model and/or ollama model name.
+   Open the ask.py file with a text editor and modify at the top of the file the paths that point to your locally stored litertlm model and/or ollama model name.
  * Update Script Reference:
    Update the internal path pointing to ask.py inside the ask file.
  * Move Files to Bin:
