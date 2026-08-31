@@ -20,4 +20,5 @@ ask "question goes here"
 <br><br>
 You need to have litertlm and python3 installed in termux first! This script also works in Linux
 <br><br>
-<img width="720" height="1604" alt="1000078679" src="https://github.com/user-attachments/assets/4f9200ef-63a0-484c-94bd-80a002527fe0" />
+<img width="720" height="1604" alt="1000078692" src="https://github.com/user-attachments/assets/9c361c60-3d0e-4507-baad-ac8b76f4a7d4" />
+<img width="720" height="1604" alt="1000078693" src="https://github.com/user-attachments/assets/e5f9bb5a-f0e5-40cb-b3f2-3aad24d83ff6" />
