@@ -13,7 +13,8 @@ Before installing, ensure you have the following packages installed on your syst
  * ollama
  * llama.cpp
 
-# Ollama *only* preparation<br><br>
+# Ollama *only* preparation
+
  * Download your gguf file
  * Open the terminal in the same place you have the "gguf" file, "Modelfile", and "register.sh" placed.
  * Open "Modelfile" with a text editor and edit the line to point to your gguf file.
