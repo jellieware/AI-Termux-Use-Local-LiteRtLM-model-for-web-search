@@ -34,7 +34,7 @@ chmod +x /usr/bin/ask.py
 To ask your local AI a question with web search enabled, use the following command structure:
 ask your question, search the web
 
-> Note: Quotation marks are not required around your question. You must include the exact suffix ,search the web at the end of your input to trigger the feature.
+> Note: Quotation marks are not required around your question. You must include the exact suffix <i>, search the web</i> at the end of your input to trigger the feature.
 > 
 
 <img width="720" height="1604" alt="1000078692" src="https://github.com/user-attachments/assets/9c361c60-3d0e-4507-baad-ac8b76f4a7d4" />
