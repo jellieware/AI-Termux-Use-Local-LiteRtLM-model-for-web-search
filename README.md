@@ -16,7 +16,9 @@ chmod +x /data/data/com.termux/files/usr/bin/ask.py
 <br><br>
 To ask a question simply type:
 <br><br>
-ask "question goes here"
+ask <i>your question</i>, search the web
+<br><br>
+*Note: you do not need quotation marks to ask a question, just make sure you add: ',search the web' at the end!
 <br><br>
 You need to have litertlm and python3 installed in termux first! This script also works in Linux
 <br><br>
