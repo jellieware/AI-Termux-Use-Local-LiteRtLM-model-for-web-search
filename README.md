@@ -27,7 +27,7 @@ chmod +x /data/data/com.termux/files/usr/bin/ask<br>
 chmod +x /data/data/com.termux/files/usr/bin/ask.py
 
 # Linux
-chmod +x /usr/bin/ask
+chmod +x /usr/bin/ask<br>
 chmod +x /usr/bin/ask.py
 
 # Usage
