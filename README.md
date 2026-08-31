@@ -23,7 +23,7 @@ Before installing, ensure you have the following packages installed on your syst
    Make the files executable by running the appropriate command for your environment:
 
 # Android / Termux
-chmod +x /data/data/com.termux/files/usr/bin/ask
+chmod +x /data/data/com.termux/files/usr/bin/ask<br>
 chmod +x /data/data/com.termux/files/usr/bin/ask.py
 
 # Linux
