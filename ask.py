@@ -7,6 +7,7 @@ import urllib.parse
 import urllib.error
 import re
 import html
+from html.parser import HTMLParser
 from datetime import datetime
 
 import litert_lm
@@ -18,6 +19,11 @@ import litert_lm
 
 MAX_RESULTS = 15
 SEARCH_TIMEOUT = 20
+PAGE_FETCH_LIMIT = 8
+LINKS_PER_PAGE = 2
+PAGE_CHAR_LIMIT = 5000
+TOTAL_WEB_CHAR_LIMIT = 18000
+MODEL_WEB_CHAR_LIMIT = 6000
 
 USER_AGENT = (
     "Mozilla/5.0 (Linux; Android 10; K) "
@@ -395,6 +401,8 @@ def duckduckgo_search(query):
             )
 
             if results:
+                for result in results:
+                    result["engine"] = "DuckDuckGo"
                 return results
 
             # ----------------------------------------------
@@ -406,6 +414,8 @@ def duckduckgo_search(query):
             )
 
             if results:
+                for result in results:
+                    result["engine"] = "DuckDuckGo"
                 return results
 
         except urllib.error.HTTPError as e:
@@ -450,131 +460,304 @@ def duckduckgo_search(query):
 
 
 # ============================================================
+# STARTPAGE SEARCH
+# ============================================================
+
+def startpage_search(query):
+    query = query.strip()
+    if not query:
+        return []
+
+    encoded = urllib.parse.urlencode({
+        "query": query,
+        "cat": "web",
+        "pl": "opensearch"
+    })
+    search_url = "https://www.startpage.com/sp/search?" + encoded
+    headers = {
+        "User-Agent": USER_AGENT,
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Cache-Control": "no-cache",
+        "Pragma": "no-cache",
+    }
+
+    try:
+        status("[Searching Startpage...]", "cyan")
+        request = urllib.request.Request(search_url, headers=headers, method="GET")
+        with urllib.request.urlopen(request, timeout=SEARCH_TIMEOUT) as response:
+            page = response.read().decode("utf-8", errors="replace")
+
+        if not page:
+            return []
+
+        results = []
+        patterns = [
+            r'<a[^>]+href=["\']([^"\']+)["\'][^>]+class=["\'][^"\']*w-gl__result-title[^"\']*["\'][^>]*>(.*?)</a>',
+            r'<a[^>]+class=["\'][^"\']*w-gl__result-title[^"\']*["\'][^>]+href=["\']([^"\']+)["\'][^>]*>(.*?)</a>',
+            r'<a[^>]+href=["\']([^"\']+)["\'][^>]*>(.*?)</a>',
+        ]
+
+        matches = []
+        for pattern in patterns:
+            matches = re.findall(pattern, page, flags=re.I | re.S)
+            if matches:
+                break
+
+        for href, title_html in matches:
+            title = clean_html(title_html)
+            url = html.unescape(href)
+            if url.startswith("/"):
+                url = urllib.parse.urljoin("https://www.startpage.com", url)
+            if "startpage.com" in url and ("/sp/" in url or "query=" in url):
+                continue
+            if not title or not url.startswith(("http://", "https://")):
+                continue
+            if len(title) < 3:
+                continue
+
+            results.append({
+                "title": title,
+                "url": decode_url(url),
+                "snippet": "",
+                "engine": "Startpage",
+            })
+            if len(results) >= MAX_RESULTS:
+                break
+
+        return results
+
+    except urllib.error.HTTPError as e:
+        status(f"[Startpage HTTP {e.code}: {e.reason}]", "red")
+    except urllib.error.URLError as e:
+        status(f"[Startpage network error: {e.reason}]", "red")
+    except Exception as e:
+        status(f"[Startpage error: {e}]", "red")
+
+    return []
+
+
+# ============================================================
+# WEBPAGE EXTRACTION
+# ============================================================
+
+class PageTextExtractor(HTMLParser):
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.parts = []
+        self.links = []
+        self.skip_depth = 0
+        self.current_href = None
+        self.current_link_text = []
+        self.skip_tags = {"script", "style", "noscript", "svg", "canvas", "nav", "footer", "form", "aside"}
+
+    def handle_starttag(self, tag, attrs):
+        attrs = dict(attrs)
+        if tag in self.skip_tags:
+            self.skip_depth += 1
+            return
+        if self.skip_depth:
+            return
+        if tag == "a" and attrs.get("href"):
+            self.current_href = attrs.get("href")
+            self.current_link_text = []
+        if tag in {"p", "div", "article", "section", "main", "header", "h1", "h2", "h3", "h4", "li", "br"}:
+            self.parts.append("\n")
+
+    def handle_endtag(self, tag):
+        if tag in self.skip_tags:
+            if self.skip_depth:
+                self.skip_depth -= 1
+            return
+        if self.skip_depth:
+            return
+        if tag == "a" and self.current_href:
+            text = clean_html(" ".join(self.current_link_text))
+            if text:
+                self.links.append((self.current_href, text))
+            self.current_href = None
+            self.current_link_text = []
+        if tag in {"p", "div", "article", "section", "main", "header", "h1", "h2", "h3", "h4", "li"}:
+            self.parts.append("\n")
+
+    def handle_data(self, data):
+        if self.skip_depth:
+            return
+        text = data.strip()
+        if not text:
+            return
+        self.parts.append(text + " ")
+        if self.current_href is not None:
+            self.current_link_text.append(text)
+
+
+def fetch_webpage(url):
+    if not url.startswith(("http://", "https://")):
+        return "", []
+
+    headers = {
+        "User-Agent": USER_AGENT,
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,text/plain;q=0.8,*/*;q=0.5",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Cache-Control": "no-cache",
+    }
+    try:
+        request = urllib.request.Request(url, headers=headers, method="GET")
+        with urllib.request.urlopen(request, timeout=SEARCH_TIMEOUT) as response:
+            content_type = response.headers.get("Content-Type", "")
+            if "text/html" not in content_type.lower() and "application/xhtml" not in content_type.lower():
+                return "", []
+            raw = response.read(2_000_000).decode("utf-8", errors="replace")
+
+        parser = PageTextExtractor()
+        parser.feed(raw)
+        text = clean_html(" ".join(parser.parts))
+        return text[:PAGE_CHAR_LIMIT], parser.links
+    except Exception:
+        return "", []
+
+
+def choose_followup_links(base_url, links, query):
+    base = urllib.parse.urlparse(base_url)
+    query_terms = [x.lower() for x in re.findall(r"[a-zA-Z0-9]{4,}", query)]
+    scored = []
+    seen = set()
+
+    for href, text in links:
+        full = urllib.parse.urljoin(base_url, href)
+        parsed = urllib.parse.urlparse(full)
+        if parsed.scheme not in ("http", "https"):
+            continue
+        if parsed.netloc != base.netloc:
+            continue
+        clean_url = full.split("#", 1)[0]
+        if clean_url.rstrip("/") == base_url.rstrip("/") or clean_url in seen:
+            continue
+        if re.search(r"\.(jpg|jpeg|png|gif|webp|svg|mp4|mp3|zip|exe|css|js)(\?|$)", parsed.path, re.I):
+            continue
+        seen.add(clean_url)
+
+        haystack = (text + " " + parsed.path).lower()
+        score = sum(2 for term in query_terms if term in haystack)
+        if any(word in haystack for word in ("source", "original", "study", "research", "report", "details", "documentation", "docs", "announcement")):
+            score += 4
+        if parsed.netloc == base.netloc:
+            score += 1
+        scored.append((score, clean_url))
+
+    scored.sort(reverse=True)
+    return [url for _, url in scored[:LINKS_PER_PAGE]]
+
+
+def enrich_with_webpages(results, query):
+    if not results:
+        return results
+
+    enriched = []
+    seen_pages = set()
+    total_chars = 0
+
+    for index, result in enumerate(results[:PAGE_FETCH_LIMIT]):
+        url = result.get("url", "")
+        if not url or url in seen_pages:
+            continue
+        seen_pages.add(url)
+
+        status(f"[Reading webpage {index + 1}/{min(len(results), PAGE_FETCH_LIMIT)}]", "cyan")
+        text, links = fetch_webpage(url)
+        if text:
+            result["page_content"] = text
+            total_chars += len(text)
+        enriched.append(result)
+
+        if total_chars >= TOTAL_WEB_CHAR_LIMIT:
+            break
+
+        # Level 3: follow up to two relevant links from each important result.
+        for linked_url in choose_followup_links(url, links, query):
+            if linked_url in seen_pages or total_chars >= TOTAL_WEB_CHAR_LIMIT:
+                continue
+            seen_pages.add(linked_url)
+            status("[Reading linked source page...]", "cyan")
+            linked_text, _ = fetch_webpage(linked_url)
+            if linked_text:
+                enriched.append({
+                    "title": "Linked page from " + result.get("title", "source"),
+                    "url": linked_url,
+                    "snippet": "",
+                    "engine": result.get("engine", "Web"),
+                    "page_content": linked_text,
+                })
+                total_chars += len(linked_text)
+
+    # Preserve search results that were not fetched.
+    for result in results[PAGE_FETCH_LIMIT:]:
+        if total_chars >= TOTAL_WEB_CHAR_LIMIT:
+            break
+        enriched.append(result)
+
+    return enriched
+
+
+# ============================================================
 # MULTI-QUERY SEARCH
 #
 # Instead of searching only one vague query, create several
 # targeted searches and combine the results.
 # ============================================================
 
-def perform_web_search(
-    user_prompt
-):
-
-    query = make_search_query(
-        user_prompt
-    )
+def perform_web_search(user_prompt):
+    query = make_search_query(user_prompt)
 
     is_news = any(
         term in query.lower()
-        for term in [
-            "news",
-            "headline",
-            "headlines",
-            "breaking",
-            "top stories"
-        ]
+        for term in ["news", "headline", "headlines", "breaking", "top stories"]
     )
 
-    searches = []
-
-    # --------------------------------------------------------
-    # Main query
-    # --------------------------------------------------------
-
-    searches.append(
-        query
-    )
-
-    # --------------------------------------------------------
-    # For news/current events, search several angles.
-    # --------------------------------------------------------
-
+    searches = [query]
     if is_news:
-
-        searches.append(
-            query + " latest developments"
-        )
-
-        searches.append(
-            query + " major events"
-        )
-
-        searches.append(
-            query + " analysis"
-        )
-
-    # --------------------------------------------------------
-    # Remove duplicate search strings.
-    # --------------------------------------------------------
+        searches.extend([
+            query + " latest developments",
+            query + " major events",
+            query + " analysis",
+        ])
 
     unique_searches = []
-
     for item in searches:
-
         item = item.strip()
-
-        if (
-            item
-            and item not in unique_searches
-        ):
-
-            unique_searches.append(
-                item
-            )
+        if item and item not in unique_searches:
+            unique_searches.append(item)
 
     all_results = []
-
     seen_urls = set()
 
-    # --------------------------------------------------------
-    # Run searches.
-    # --------------------------------------------------------
-
     for search_query in unique_searches:
+        status(f"[Query: {search_query}]", "cyan")
 
-        status(
-            f"[Query: {search_query}]",
-            "cyan"
-        )
+        # Search both engines.
+        engine_results = []
+        engine_results.extend(duckduckgo_search(search_query))
+        engine_results.extend(startpage_search(search_query))
 
-        results = duckduckgo_search(
-            search_query
-        )
-
-        for result in results:
-
-            url = result.get(
-                "url",
-                ""
-            )
-
+        for result in engine_results:
+            url = result.get("url", "")
             if not url:
                 continue
-
-            # Avoid duplicate pages.
-
-            normalized_url = url.rstrip(
-                "/"
-            ).lower()
-
+            normalized_url = url.rstrip("/").lower()
             if normalized_url in seen_urls:
                 continue
-
-            seen_urls.add(
-                normalized_url
-            )
-
-            all_results.append(
-                result
-            )
-
+            seen_urls.add(normalized_url)
+            all_results.append(result)
             if len(all_results) >= MAX_RESULTS:
                 break
 
         if len(all_results) >= MAX_RESULTS:
             break
 
-    return all_results
+    status(f"[Search engines returned {len(all_results)} unique results]", "green")
+
+    # Level 3: open important results and follow relevant linked pages.
+    return enrich_with_webpages(all_results, query)
 
 
 # ============================================================
@@ -652,11 +835,23 @@ def web_search(
             f"URL: {url}"
         )
 
-        if snippet:
+        engine = result.get("engine", "Web")
 
+        output.append(
+            f"SEARCH ENGINE: {engine}"
+        )
+
+        if snippet:
             output.append(
                 f"SNIPPET: {snippet}"
             )
+
+        page_content = result.get("page_content", "")
+        if page_content:
+            output.append(
+                "WEBPAGE CONTENT:"
+            )
+            output.append(page_content)
 
         output.append(
             ""
@@ -829,6 +1024,14 @@ def build_web_prompt(
     web_results
 ):
 
+    # LiteRT-LM model context is 4096 tokens. Keep the
+    # retrieved webpage material comfortably below that limit.
+    # Level 3 retrieval still happens; only the amount passed
+    # into Gemma is capped.
+    if len(web_results) > MODEL_WEB_CHAR_LIMIT:
+        web_results = web_results[:MODEL_WEB_CHAR_LIMIT]
+        web_results += "\n\n[Additional retrieved webpage content omitted to stay within the model context limit.]"
+
     return f"""
 You are an AI assistant with access to LIVE WEB SEARCH
 RESULTS supplied by the application.
@@ -844,42 +1047,20 @@ IMPORTANT:
 
 - Do NOT say that you cannot access the internet.
 - Do NOT say that you do not have real-time information.
-- Do NOT say that you lack live news feeds.
 - Do NOT give a vague generic answer.
-- Do NOT simply repeat one search result.
 - Do NOT invent facts.
 - Do NOT invent URLs or sources.
 - Use multiple results whenever possible.
 - Compare information across different results.
-- Explain the important details.
-- Include relevant dates.
-- Explain what happened, who was involved, where it
-  happened, and why it matters when that information is
-  available.
-- For news, distinguish individual stories instead of
-  combining everything into one vague paragraph.
+- Use the actual webpage content when available, not only snippets.
 - If sources disagree, mention the disagreement.
-- If the available results are insufficient, explicitly
-  say what information is missing.
+- If the available results are insufficient, explicitly say what
+  information is missing.
 
 DEPTH REQUIREMENT:
 
-Give a detailed, substantive answer.
-
-For a news request, provide:
-
-1. A concise overview of the major stories.
-2. Separate sections for the most important stories.
-3. What happened.
-4. The key people, organizations, or countries involved.
-5. Important dates and numbers when available.
-6. Why each story matters.
-7. Relevant background or context from the search results.
-8. What is known versus what remains uncertain.
-9. Source URLs at the end of the relevant sections.
-
-Do not make the answer unnecessarily repetitive, but
-prefer depth over a short generic response.
+Give a detailed, substantive answer based on the retrieved
+webpage material. Prefer factual detail over generic commentary.
 
 LIVE WEB SEARCH RESULTS
 =======================
@@ -888,8 +1069,8 @@ LIVE WEB SEARCH RESULTS
 
 =======================
 
-Now answer the user's question in detail using the
-search results above.
+Now answer the user's question using the search results and
+webpage content above.
 """.strip()
 
 
