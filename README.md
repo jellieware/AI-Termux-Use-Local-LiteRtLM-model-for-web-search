@@ -1,5 +1,7 @@
 # AI-Termux-Use-Local-LiteRtLM-model-for-web-search
 <br><br>
+<img width="677" height="369" alt="1000078700" src="https://github.com/user-attachments/assets/98e784a6-8453-4935-a68e-769678c4c936" />
+<br><br>
 Local AI Web Search
 Empower your local AI model with real-time web search capabilities in Termux (Android) and Linux environments.
 Prerequisites
