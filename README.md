@@ -3,7 +3,9 @@
 <img width="677" height="369" alt="1000078704" src="https://github.com/user-attachments/assets/05e1d10c-53c1-4e46-a61a-90d86c86d2cc" />
 <br><br>
 Local AI Web Search
-Empower your local AI model with real-time web search capabilities in Termux (Android) and Linux environments.
+Empower your local AI model with real-time web search capabilities in Termux (Android) and Linux environments. The script is compatible with "LiteRtLm" models and "gguf" models. To choose either modify "default.txt":
+ * 1 = "LiteRtLm"
+ * 2 = "gguf" <br>
 Prerequisites
 Before installing, ensure you have the following packages installed on your system:
  * python3
