@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
-
+#llama-quantize ./granite-4.0-350m-Q4_K_M.gguf ./granite4.gguf q4_k_m
 import sys
+import os
 import json
 import urllib.request
 import urllib.parse
@@ -10,7 +11,11 @@ import html
 from html.parser import HTMLParser
 from datetime import datetime
 
-import litert_lm
+# LiteRT-LM is only required when default.txt contains 1.
+try:
+    import litert_lm
+except ImportError:
+    litert_lm = None
 
 
 # ============================================================
@@ -24,6 +29,26 @@ LINKS_PER_PAGE = 2
 PAGE_CHAR_LIMIT = 5000
 TOTAL_WEB_CHAR_LIMIT = 18000
 MODEL_WEB_CHAR_LIMIT = 6000
+
+# ============================================================
+# MODEL BACKEND SETTINGS
+# ============================================================
+#
+# default.txt:
+#   1 = LiteRT-LM
+#   2 = Ollama / GGUF
+#
+# For mode 2, the GGUF model should be imported into Ollama.
+# Set OLLAMA_MODEL below, or use the OLLAMA_MODEL environment
+# variable when launching the script.
+#
+DEFAULT_FILE = "/data/data/com.termux/files/usr/bin/default.txt"
+LITERT_MODEL_PATH = "/storage/emulated/0/gemma-4-E2B-it.litertlm"
+
+OLLAMA_HOST = "http://127.0.0.1:11434"
+OLLAMA_MODEL = "granite4"
+OLLAMA_TIMEOUT = 300
+
 
 USER_AGENT = (
     "Mozilla/5.0 (Linux; Android 10; K) "
@@ -1075,6 +1100,198 @@ webpage content above.
 
 
 # ============================================================
+# MODEL BACKENDS
+# ============================================================
+
+def read_model_mode():
+    """Read default.txt: 1 = LiteRT-LM, 2 = Ollama/GGUF."""
+    try:
+        with open(DEFAULT_FILE, "r", encoding="utf-8") as f:
+            value = f.read().strip()
+    except OSError as e:
+        status(f"[Could not read {DEFAULT_FILE}: {e}]", "red")
+        status("[Create default.txt containing 1 or 2.]", "yellow")
+        sys.exit(1)
+
+    if value not in ("1", "2"):
+        status(
+            f"[Invalid {DEFAULT_FILE}: {value!r}. Use 1 or 2.]",
+            "red"
+        )
+        sys.exit(1)
+
+    return int(value)
+
+
+def get_ollama_model():
+    return os.environ.get(
+        "OLLAMA_MODEL",
+        OLLAMA_MODEL
+    ).strip()
+
+
+def ollama_generate(prompt):
+    """
+    Send a prompt to Ollama's local /api/chat endpoint.
+
+    Ollama can serve a GGUF model after that model has been
+    imported into Ollama with a Modelfile.
+    """
+    model = get_ollama_model()
+
+    if not model:
+        raise RuntimeError(
+            "OLLAMA_MODEL is empty. Set it to the installed "
+            "Ollama model name."
+        )
+
+    url = OLLAMA_HOST.rstrip("/") + "/api/chat"
+
+    payload = {
+        "model": model,
+        "messages": [
+            {
+                "role": "user",
+                "content": prompt
+            }
+        ],
+        "stream": False
+    }
+
+    request = urllib.request.Request(
+        url,
+        data=json.dumps(payload).encode("utf-8"),
+        headers={
+            "Content-Type": "application/json",
+            "Accept": "application/json"
+        },
+        method="POST"
+    )
+
+    status(f"[Using Ollama model: {model}]", "cyan")
+
+    with urllib.request.urlopen(
+        request,
+        timeout=OLLAMA_TIMEOUT
+    ) as response:
+        raw = response.read().decode(
+            "utf-8",
+            errors="replace"
+        )
+
+    if not raw:
+        raise RuntimeError("Ollama returned an empty response.")
+
+    result = json.loads(raw)
+
+    message = result.get("message", {})
+
+    if isinstance(message, dict):
+        content = message.get("content", "")
+        if content:
+            return str(content)
+
+    # Compatibility with Ollama-compatible servers using
+    # the /api/generate response shape.
+    content = result.get("response", "")
+    if content:
+        return str(content)
+
+    raise RuntimeError(
+        "Ollama returned no assistant text."
+    )
+
+
+def clean_model_response(raw_text):
+    """Common response cleanup for both model backends."""
+    if raw_text is None:
+        return ""
+
+    raw_text = str(raw_text)
+
+    raw_text = raw_text.replace(
+        "\\r\\n",
+        "\n"
+    )
+    raw_text = raw_text.replace(
+        "\\n",
+        "\n"
+    )
+
+    stripped = raw_text.strip()
+
+    # Some model wrappers return a JSON array of text fragments.
+    if stripped.startswith("[") and stripped.endswith("]"):
+        try:
+            parsed = json.loads(stripped)
+
+            if isinstance(parsed, list):
+                pieces = []
+
+                for item in parsed:
+                    if isinstance(item, dict):
+                        value = item.get("text")
+                        if value:
+                            pieces.append(str(value))
+                    elif isinstance(item, str):
+                        pieces.append(item)
+
+                if pieces:
+                    raw_text = "\n".join(pieces)
+
+        except Exception:
+            pass
+
+    return raw_text.strip()
+
+
+def run_litert_model(prompt):
+    """Run the existing LiteRT-LM backend."""
+    if litert_lm is None:
+        raise RuntimeError(
+            "litert_lm is not installed, but default.txt contains 1."
+        )
+
+    litert_lm.set_min_log_severity(
+        litert_lm.LogSeverity.ERROR
+    )
+
+    status(
+        f"[Using LiteRT-LM: {LITERT_MODEL_PATH}]",
+        "cyan"
+    )
+
+    with litert_lm.Engine(
+        LITERT_MODEL_PATH,
+        backend=litert_lm.Backend.CPU()
+    ) as engine:
+
+        with engine.create_conversation() as conversation:
+
+            response = conversation.send_message(
+                prompt
+            )
+
+            raw_text = ""
+
+            if isinstance(response, dict):
+                content = response.get("content")
+
+                if isinstance(content, dict):
+                    raw_text = content.get("text", "")
+                elif content is not None:
+                    raw_text = str(content)
+
+            elif hasattr(response, "text"):
+                raw_text = response.text
+
+            else:
+                raw_text = str(response)
+
+            return clean_model_response(raw_text)
+
+
+# ============================================================
 # MAIN
 # ============================================================
 
@@ -1103,21 +1320,21 @@ def main():
         sys.exit(1)
 
     # ========================================================
-    # MODEL
+    # MODEL BACKEND
     # ========================================================
 
-    model_path = (
-        "/storage/emulated/0/"
-        "gemma-4-E2B-it.litertlm"
-    )
+    model_mode = read_model_mode()
 
-    # ========================================================
-    # LITERT
-    # ========================================================
-
-    litert_lm.set_min_log_severity(
-        litert_lm.LogSeverity.ERROR
-    )
+    if model_mode == 1:
+        status(
+            "[default.txt = 1 -> LiteRT-LM]",
+            "green"
+        )
+    else:
+        status(
+            "[default.txt = 2 -> Ollama / GGUF]",
+            "green"
+        )
 
     final_input_text = user_prompt
 
@@ -1151,11 +1368,6 @@ def main():
 
         else:
 
-            # ------------------------------------------------
-            # Prevent the model from fabricating current
-            # information when web search failed.
-            # ------------------------------------------------
-
             final_input_text = f"""
 The application attempted a live web search but received
 no usable web results.
@@ -1169,166 +1381,79 @@ USER QUESTION:
 """.strip()
 
     # ========================================================
-    # LITERT-LM
+    # RUN SELECTED MODEL
     # ========================================================
 
     try:
 
-        with litert_lm.Engine(
-            model_path,
-            backend=litert_lm.Backend.CPU()
-        ) as engine:
+        if model_mode == 1:
 
-            with engine.create_conversation() as conversation:
+            raw_text = run_litert_model(
+                final_input_text
+            )
 
-                response = conversation.send_message(
-                    final_input_text
-                )
+        else:
 
-                # =================================================
-                # EXTRACT TEXT
-                # =================================================
+            raw_text = ollama_generate(
+                final_input_text
+            )
 
-                raw_text = ""
+        if not raw_text:
 
-                if isinstance(
-                    response,
-                    dict
-                ):
+            print(
+                "No response generated.",
+                file=sys.stderr
+            )
 
-                    content = response.get(
-                        "content"
-                    )
+            sys.exit(1)
 
-                    if isinstance(
-                        content,
-                        dict
-                    ):
+        print(
+            raw_text
+        )
 
-                        raw_text = content.get(
-                            "text",
-                            ""
-                        )
+    except urllib.error.HTTPError as e:
 
-                    elif content is not None:
+        print(
+            f"Model HTTP error: {e.code}: {e.reason}",
+            file=sys.stderr
+        )
 
-                        raw_text = str(
-                            content
-                        )
+        if model_mode == 2:
+            print(
+                "[Make sure Ollama is running and the model "
+                "name is installed.]",
+                file=sys.stderr
+            )
 
-                elif hasattr(
-                    response,
-                    "text"
-                ):
+        sys.exit(1)
 
-                    raw_text = response.text
+    except urllib.error.URLError as e:
 
-                else:
+        print(
+            f"Model connection error: {e.reason}",
+            file=sys.stderr
+        )
 
-                    raw_text = str(
-                        response
-                    )
+        if model_mode == 2:
+            print(
+                f"[Could not connect to Ollama at {OLLAMA_HOST}]",
+                file=sys.stderr
+            )
 
-                # =================================================
-                # HANDLE EMPTY RESPONSE
-                # =================================================
-
-                if not raw_text:
-
-                    print(
-                        "No response generated.",
-                        file=sys.stderr
-                    )
-
-                    sys.exit(1)
-
-                # =================================================
-                # CLEAN ESCAPED NEWLINES
-                # =================================================
-
-                raw_text = raw_text.replace(
-                    "\\r\\n",
-                    "\n"
-                )
-
-                raw_text = raw_text.replace(
-                    "\\n",
-                    "\n"
-                )
-
-                # =================================================
-                # HANDLE JSON RESPONSE
-                # =================================================
-
-                stripped = raw_text.strip()
-
-                if (
-                    stripped.startswith("[")
-                    and stripped.endswith("]")
-                ):
-
-                    try:
-
-                        parsed = json.loads(
-                            stripped
-                        )
-
-                        if isinstance(
-                            parsed,
-                            list
-                        ):
-
-                            pieces = []
-
-                            for item in parsed:
-
-                                if isinstance(
-                                    item,
-                                    dict
-                                ):
-
-                                    text = item.get(
-                                        "text"
-                                    )
-
-                                    if text:
-
-                                        pieces.append(
-                                            str(text)
-                                        )
-
-                                elif isinstance(
-                                    item,
-                                    str
-                                ):
-
-                                    pieces.append(
-                                        item
-                                    )
-
-                            if pieces:
-
-                                raw_text = "\n".join(
-                                    pieces
-                                )
-
-                    except Exception:
-                        pass
-
-                # =================================================
-                # OUTPUT
-                # =================================================
-
-                print(
-                    raw_text.strip()
-                )
+        sys.exit(1)
 
     except Exception as e:
 
-        print(
-            f"LiteRT-LM error: {e}",
-            file=sys.stderr
-        )
+        if model_mode == 1:
+            print(
+                f"LiteRT-LM error: {e}",
+                file=sys.stderr
+            )
+        else:
+            print(
+                f"Ollama/GGUF error: {e}",
+                file=sys.stderr
+            )
 
         sys.exit(1)
 
