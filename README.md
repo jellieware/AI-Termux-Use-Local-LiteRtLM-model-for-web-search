@@ -20,6 +20,7 @@ Before installing, ensure you have the following packages installed on your syst
  * Open "Modelfile" with a text editor and edit the line to point to your gguf file.
  * Open "register.sh" with a text editor and edit the model name with any name you want, dont forget to write the exact same name at the top of the file "ask.py" where it says ollama_model=
  * Run the command: chmod +x register.sh
+ * In another terminal tab run: ollama serve 
  * Run the command: bash register.sh
  * At this point it should register your "gguf" file. 
  * If it does not register! You might have to run the following command: llama-quantize ./original.gguf ./modified.gguf q4_k_m
