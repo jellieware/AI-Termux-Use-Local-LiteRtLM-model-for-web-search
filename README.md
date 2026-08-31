@@ -6,7 +6,8 @@ Prerequisites
 Before installing, ensure you have the following packages installed on your system:
  * python3
  * litertlm
-Installation & Setup
+
+# Installation & Setup
  * Configure the Model Path:
    Open the ask.py file in a text editor and update line 1110 to point to your locally stored litertlm model.
  * Update Script Reference:
@@ -15,9 +16,11 @@ Installation & Setup
    Place both the ask and ask.py files into your system's bin directory:
    * Android (Termux): /data/data/com.termux/files/usr/bin/
    * Linux: /usr/bin/
- * Grant Permissions:
+
+# Grant Permissions:
    Make the files executable by running the appropriate command for your environment:
-   # Android / Termux
+
+# Android / Termux
 chmod +x /data/data/com.termux/files/usr/bin/ask
 chmod +x /data/data/com.termux/files/usr/bin/ask.py
 
