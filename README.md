@@ -8,10 +8,11 @@ Prerequisites
 Before installing, ensure you have the following packages installed on your system:
  * python3
  * litertlm
+ * ollama
 
 # Installation & Setup
  * Configure the Model Path:
-   Open the ask.py file in a text editor and update line 1110 to point to your locally stored litertlm model.
+   Open the ask.py file in a text editor and modify at the top of the file the paths that point to your locally stored litertlm model and/or ollama model name.
  * Update Script Reference:
    Update the internal path pointing to ask.py inside the ask file.
  * Move Files to Bin:
