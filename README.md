@@ -28,7 +28,7 @@ chmod +x /data/data/com.termux/files/usr/bin/ask.py
 chmod +x /usr/bin/ask
 chmod +x /usr/bin/ask.py
 
-Usage
+# Usage
 To ask your local AI a question with web search enabled, use the following command structure:
 ask your question,search the web
 
